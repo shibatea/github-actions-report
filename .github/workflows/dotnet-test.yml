@@ -38,29 +38,33 @@ jobs:
     
     - name: Run tests with coverage
       run: |
-        dotnet test --no-build --verbosity normal \
+        dotnet test --verbosity normal \
           --logger "trx;LogFileName=test-results.trx" \
           --logger "junit;LogFileName=test-results.xml" \
-          --logger "html;LogFileName=test-results.html" \
           --collect:"XPlat Code Coverage" \
           --results-directory ./TestResults \
-          /p:CollectCoverage=true \
-          /p:CoverletOutputFormat=cobertura \
-          /p:CoverletOutput=./TestResults/
+          -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=cobertura
+    
+    - name: List test result files
+      run: |
+        echo "Contents of TestResults directory:"
+        find TestResults -type f -name "*.xml" | head -20
+        echo "Looking for junit files:"
+        find . -name "*test-results.xml" -o -name "*junit*.xml" | head -10
     
     - name: Test Report
       uses: dorny/test-reporter@v1
       if: always()
       with:
         name: .NET Test Results
-        path: '**/test-results.xml'
+        path: 'TestResults/**/*.xml'
         reporter: java-junit
         fail-on-error: false
     
     - name: Code Coverage Report
       uses: danielpalme/ReportGenerator-GitHub-Action@5.2.0
       with:
-        reports: '**/coverage.cobertura.xml'
+        reports: 'TestResults/**/coverage.cobertura.xml'
         targetdir: 'CoverageReports'
         reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
     
