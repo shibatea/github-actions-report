@@ -1,0 +1,157 @@
+name: All Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  dotnet-tests:
+    name: C# Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --no-restore
+    
+    - name: Run tests with coverage
+      run: |
+        dotnet test --no-build --verbosity normal \
+          --logger "trx;LogFileName=test-results.trx" \
+          --logger "junit;LogFileName=test-results.xml" \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          /p:CollectCoverage=true \
+          /p:CoverletOutputFormat=cobertura \
+          /p:CoverletOutput=./TestResults/
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: dotnet-test-results
+        path: TestResults/
+    
+    - name: Test Report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: C# Test Results
+        path: '**/test-results.xml'
+        reporter: java-junit
+        fail-on-error: false
+
+  react-tests:
+    name: React Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: react-app/package-lock.json
+    
+    - name: Install dependencies
+      run: npm ci
+      working-directory: react-app
+    
+    - name: Run tests with coverage
+      run: npm run test:ci
+      working-directory: react-app
+      env:
+        CI: true
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: jest-test-results
+        path: |
+          react-app/test-results/
+          react-app/coverage/
+    
+    - name: Test Report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: React Test Results
+        path: 'react-app/test-results/junit.xml'
+        reporter: jest-junit
+        fail-on-error: false
+
+  test-summary:
+    name: Test Summary
+    needs: [dotnet-tests, react-tests]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Download all test results
+      uses: actions/download-artifact@v4
+      with:
+        path: test-artifacts
+    
+    - name: Generate Coverage Report
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.2.0
+      with:
+        reports: |
+          test-artifacts/dotnet-test-results/**/coverage.cobertura.xml
+          test-artifacts/jest-test-results/coverage/cobertura-coverage.xml
+        targetdir: 'CoverageReports'
+        reporttypes: 'HtmlInline;Cobertura;MarkdownSummary;Badges'
+        title: 'Test Coverage Report'
+    
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: CoverageReports/
+    
+    - name: Add Coverage PR Comment
+      uses: marocchino/sticky-pull-request-comment@v2
+      if: github.event_name == 'pull_request'
+      with:
+        recreate: true
+        path: CoverageReports/Summary.md
+    
+    - name: Write to Job Summary
+      run: |
+        echo "## テスト結果サマリー 📊" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -f CoverageReports/Summary.md ]; then
+          cat CoverageReports/Summary.md >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 詳細レポート" >> $GITHUB_STEP_SUMMARY
+        echo "- [C# テスト結果](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) - Checksタブを確認" >> $GITHUB_STEP_SUMMARY
+        echo "- [React テスト結果](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) - Checksタブを確認" >> $GITHUB_STEP_SUMMARY
+        echo "- [カバレッジレポート](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) - Artifactsからダウンロード可能" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload coverage to Codecov (Optional)
+      uses: codecov/codecov-action@v3
+      continue-on-error: true
+      with:
+        files: |
+          test-artifacts/dotnet-test-results/**/coverage.cobertura.xml
+          test-artifacts/jest-test-results/coverage/cobertura-coverage.xml
+        flags: unittests
+        name: codecov-umbrella

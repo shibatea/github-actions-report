@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitHub Actions テスト結果レポート</title>
+    <style>
+        :root {
+            --primary-color: #0969da;
+            --success-color: #1a7f37;
+            --warning-color: #9a6700;
+            --error-color: #cf222e;
+            --bg-color: #f6f8fa;
+            --card-bg: #ffffff;
+            --text-color: #1f2328;
+            --border-color: #d1d9e0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+        
+        .header .build-info {
+            color: #656d76;
+            font-size: 0.875rem;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 3rem;
+        }
+        
+        .summary-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        
+        .summary-card .icon {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .summary-card.success .icon { color: var(--success-color); }
+        .summary-card.warning .icon { color: var(--warning-color); }
+        .summary-card.error .icon { color: var(--error-color); }
+        
+        .summary-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0.5rem 0;
+        }
+        
+        .summary-card .label {
+            color: #656d76;
+            font-size: 0.875rem;
+        }
+        
+        .test-results {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .test-results h2 {
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .test-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .test-table th {
+            background-color: var(--bg-color);
+            padding: 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        .test-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .test-table tr:hover {
+            background-color: var(--bg-color);
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-badge.passed {
+            background-color: #1a7f371a;
+            color: var(--success-color);
+        }
+        
+        .status-badge.failed {
+            background-color: #cf222e1a;
+            color: var(--error-color);
+        }
+        
+        .status-badge.skipped {
+            background-color: #9a67001a;
+            color: var(--warning-color);
+        }
+        
+        .coverage-bar {
+            width: 100%;
+            height: 20px;
+            background-color: var(--bg-color);
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 1rem 0;
+        }
+        
+        .coverage-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--success-color), #2ea043);
+            transition: width 1s ease-out;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #656d76;
+            font-size: 0.875rem;
+            margin-top: 3rem;
+            padding-top: 2rem;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 1rem;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🧪 テスト結果レポート</h1>
+            <div class="build-info">
+                ビルド #<span id="build-number">123</span> | 
+                ブランチ: <span id="branch-name">main</span> | 
+                <span id="build-date">2024-01-01 12:00:00</span>
+            </div>
+        </div>
+        
+        <div class="summary-grid">
+            <div class="summary-card success">
+                <div class="icon">✅</div>
+                <div class="value" id="passed-count">142</div>
+                <div class="label">成功したテスト</div>
+            </div>
+            
+            <div class="summary-card error">
+                <div class="icon">❌</div>
+                <div class="value" id="failed-count">3</div>
+                <div class="label">失敗したテスト</div>
+            </div>
+            
+            <div class="summary-card warning">
+                <div class="icon">⏭️</div>
+                <div class="value" id="skipped-count">5</div>
+                <div class="label">スキップされたテスト</div>
+            </div>
+            
+            <div class="summary-card">
+                <div class="icon">📊</div>
+                <div class="value" id="coverage-percent">87.3%</div>
+                <div class="label">コードカバレッジ</div>
+            </div>
+        </div>
+        
+        <div class="test-results">
+            <h2>
+                <span>🔬</span>
+                C# テスト結果
+            </h2>
+            <table class="test-table">
+                <thead>
+                    <tr>
+                        <th>テストクラス</th>
+                        <th>テストケース</th>
+                        <th>ステータス</th>
+                        <th>実行時間</th>
+                    </tr>
+                </thead>
+                <tbody id="csharp-test-results">
+                    <tr>
+                        <td>CalculatorTests</td>
+                        <td>Add_TwoPositiveNumbers_ReturnsSum</td>
+                        <td><span class="status-badge passed">Passed</span></td>
+                        <td>12ms</td>
+                    </tr>
+                    <tr>
+                        <td>CalculatorTests</td>
+                        <td>Divide_ByZero_ThrowsException</td>
+                        <td><span class="status-badge passed">Passed</span></td>
+                        <td>8ms</td>
+                    </tr>
+                    <tr>
+                        <td>StringUtilitiesTests</td>
+                        <td>IsPalindrome_ValidPalindrome_ReturnsTrue</td>
+                        <td><span class="status-badge failed">Failed</span></td>
+                        <td>25ms</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="test-results">
+            <h2>
+                <span>⚛️</span>
+                React テスト結果
+            </h2>
+            <table class="test-table">
+                <thead>
+                    <tr>
+                        <th>コンポーネント</th>
+                        <th>テストケース</th>
+                        <th>ステータス</th>
+                        <th>実行時間</th>
+                    </tr>
+                </thead>
+                <tbody id="react-test-results">
+                    <tr>
+                        <td>Calculator</td>
+                        <td>renders calculator with initial display</td>
+                        <td><span class="status-badge passed">Passed</span></td>
+                        <td>45ms</td>
+                    </tr>
+                    <tr>
+                        <td>TodoList</td>
+                        <td>adds a new todo item</td>
+                        <td><span class="status-badge passed">Passed</span></td>
+                        <td>32ms</td>
+                    </tr>
+                    <tr>
+                        <td>TodoList</td>
+                        <td>deletes todo item</td>
+                        <td><span class="status-badge passed">Passed</span></td>
+                        <td>28ms</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="test-results">
+            <h2>
+                <span>📈</span>
+                カバレッジ詳細
+            </h2>
+            <div>
+                <h3>全体カバレッジ</h3>
+                <div class="coverage-bar">
+                    <div class="coverage-fill" style="width: 87.3%"></div>
+                </div>
+                <p>87.3% (1,245 / 1,426 行)</p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>このレポートは GitHub Actions によって自動生成されました</p>
+            <p>詳細な情報は <a href="#">ワークフロー実行ログ</a> をご確認ください</p>
+        </div>
+    </div>
+    
+    <script>
+        // 実際の使用時は、GitHub Actions から生成されたJSONデータを読み込んで表示を更新します
+        document.addEventListener('DOMContentLoaded', function() {
+            // ビルド情報の更新
+            document.getElementById('build-date').textContent = new Date().toLocaleString('ja-JP');
+            
+            // アニメーション効果
+            const cards = document.querySelectorAll('.summary-card');
+            cards.forEach((card, index) => {
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                setTimeout(() => {
+                    card.style.transition = 'opacity 0.5s, transform 0.5s';
+                    card.style.opacity = '1';
+                    card.style.transform = 'translateY(0)';
+                }, index * 100);
+            });
+        });
+    </script>
+</body>
+</html>

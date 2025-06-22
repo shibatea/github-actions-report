@@ -1,0 +1,76 @@
+name: .NET Tests
+
+on:
+  push:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '*.sln'
+      - '*.csproj'
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - '*.sln'
+      - '*.csproj'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --no-restore
+    
+    - name: Run tests with coverage
+      run: |
+        dotnet test --no-build --verbosity normal \
+          --logger "trx;LogFileName=test-results.trx" \
+          --logger "junit;LogFileName=test-results.xml" \
+          --logger "html;LogFileName=test-results.html" \
+          --collect:"XPlat Code Coverage" \
+          --results-directory ./TestResults \
+          /p:CollectCoverage=true \
+          /p:CoverletOutputFormat="cobertura,opencover" \
+          /p:CoverletOutput=./TestResults/
+    
+    - name: Test Report
+      uses: dorny/test-reporter@v1
+      if: always()
+      with:
+        name: .NET Test Results
+        path: '**/test-results.xml'
+        reporter: java-junit
+        fail-on-error: false
+    
+    - name: Code Coverage Report
+      uses: danielpalme/ReportGenerator-GitHub-Action@5.2.0
+      with:
+        reports: '**/coverage.cobertura.xml'
+        targetdir: 'CoverageReports'
+        reporttypes: 'HtmlInline;Cobertura;MarkdownSummary'
+    
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: dotnet-coverage-report
+        path: CoverageReports/
+    
+    - name: Coverage Summary
+      if: always()
+      run: |
+        echo "### .NET テストカバレッジ" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        if [ -f CoverageReports/Summary.md ]; then
+          cat CoverageReports/Summary.md >> $GITHUB_STEP_SUMMARY
+        fi
